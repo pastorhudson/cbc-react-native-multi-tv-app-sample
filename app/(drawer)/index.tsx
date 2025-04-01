@@ -1,8 +1,8 @@
-import { StyleSheet, FlatList, View, Image, Text } from "react-native";
-import { useNavigation, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { DrawerActions, useIsFocused } from "@react-navigation/native";
-import { useMenuContext } from "../../components/MenuContext";
+import { StyleSheet, View, Image, Text } from 'react-native';
+import { useNavigation, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
+import { DrawerActions, useIsFocused } from '@react-navigation/native';
+import { useMenuContext } from '../../components/MenuContext';
 import {
   SpatialNavigationFocusableView,
   SpatialNavigationRoot,
@@ -11,18 +11,15 @@ import {
   SpatialNavigationVirtualizedList,
   SpatialNavigationVirtualizedListRef,
   DefaultFocus,
-} from "react-tv-space-navigation";
-import { Direction } from "@bam.tech/lrud";
-import { scaledPixels } from "@/hooks/useScale";
-import { LinearGradient } from "expo-linear-gradient";
+} from 'react-tv-space-navigation';
+import { Direction } from '@bam.tech/lrud';
+import { scaledPixels } from '@/hooks/useScale';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Movie, LiveFeed, useContentData } from '../../utils/content-provider';
+import LoadingIndicator from '../../components/LoadingIndicator';
 
-interface CardData {
-  id: string;
-  title: string;
-  description: string;
-  headerImage: string;
-  movie: string;
-}
+// Create a union type for content items that can be displayed in rows
+type ContentItem = Movie | LiveFeed;
 
 export default function IndexScreen() {
   const styles = useGridStyles();
@@ -30,37 +27,60 @@ export default function IndexScreen() {
   const navigation = useNavigation();
   const { isOpen: isMenuOpen, toggleMenu } = useMenuContext();
   const trendingRef = useRef<SpatialNavigationVirtualizedListRef>(null);
-  const classicsRef = useRef<SpatialNavigationVirtualizedListRef>(null);
-  const hipAndModernRef = useRef<SpatialNavigationVirtualizedListRef>(null);
+  const sermonsRef = useRef<SpatialNavigationVirtualizedListRef>(null);
+  const specialsRef = useRef<SpatialNavigationVirtualizedListRef>(null);
+
   const [focusedIndex, setFocusedIndex] = useState(0);
   const isFocused = useIsFocused();
   const isActive = isFocused && !isMenuOpen;
 
-  const focusedItem = useMemo(() => moviesData[focusedIndex], [focusedIndex]);
+  // Use the content provider hook to get the data
+  const { isLoading, error, getRecentVideos, getLiveStreams, getContentBySeries } = useContentData();
 
-  const renderHeader = useCallback(
-    () => (
+  // Get the content groups
+  const recentVideos = useMemo(() => getRecentVideos(10), [getRecentVideos]);
+  const liveStreams = useMemo(() => getLiveStreams(), [getLiveStreams]);
+  const contentSeries = useMemo(() => getContentBySeries(), [getContentBySeries]);
+
+  // Find the featured content
+  const focusedItem = useMemo(
+    () => (recentVideos && recentVideos.length > 0 ? recentVideos[focusedIndex] : null),
+    [recentVideos, focusedIndex],
+  );
+
+  const renderHeader = useCallback(() => {
+    if (isLoading) {
+      return <LoadingIndicator />;
+    }
+
+    if (error || !focusedItem) {
+      return (
+        <View style={styles.header}>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Calvary Baptist Church</Text>
+            <Text style={styles.headerDescription}>{error || 'No content available. Please try again later.'}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
       <View style={styles.header}>
         <Image
           style={styles.headerImage}
           source={{
-            uri: focusedItem.headerImage,
+            uri: focusedItem.thumbnail,
           }}
           resizeMode="cover"
         />
         <LinearGradient
-          colors={[
-            "rgba(0,0,0,0.9)",
-            "rgba(0,0,0,0.7)",
-            "rgba(0,0,0,0.3)",
-            "transparent",
-          ]}
+          colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.3)', 'transparent']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.gradientLeft}
         />
         <LinearGradient
-          colors={["rgb(0,0,0)", "rgba(0,0,0, 0.3)", "transparent"]}
+          colors={['rgb(0,0,0)', 'rgba(0,0,0, 0.3)', 'transparent']}
           locations={[0, 0.4, 1]}
           start={{ x: 0, y: 1 }}
           end={{ x: 0, y: 0 }}
@@ -68,26 +88,16 @@ export default function IndexScreen() {
         />
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>{focusedItem.title}</Text>
-          <Text style={styles.headerDescription}>
-            {focusedItem.description}
-          </Text>
+          <Text style={styles.headerDescription}>{focusedItem.shortDescription}</Text>
         </View>
       </View>
-    ),
-    [
-      focusedItem.headerImage,
-      focusedItem.title,
-      focusedItem.description,
-      styles.header,
-      styles.gradientLeft,
-      styles.gradientBottom,
-    ],
-  );
+    );
+  }, [isLoading, error, focusedItem, styles.header, styles.gradientLeft, styles.gradientBottom]);
 
   const onDirectionHandledWithoutMovement = useCallback(
     (movement: Direction) => {
-      console.log("Direction " + movement);
-      if (movement === "left" && focusedIndex === 0) {
+      console.log('Direction ' + movement);
+      if (movement === 'left' && focusedIndex === 0) {
         navigation.dispatch(DrawerActions.openDrawer());
         toggleMenu(true);
       }
@@ -95,44 +105,44 @@ export default function IndexScreen() {
     [toggleMenu, focusedIndex, navigation],
   );
 
+  const renderItem = useCallback(
+    ({ item }: { item: ContentItem; index: number }) => (
+      <SpatialNavigationFocusableView
+        onSelect={() => {
+          router.push({
+            pathname: '/details',
+            params: {
+              id: item.id,
+              title: item.title,
+              description: item.shortDescription,
+              headerImage: item.thumbnail,
+              movie: item.content.videos[0].url,
+            },
+          });
+        }}
+        onFocus={() => {
+          // Only update focused index for recent videos to maintain header consistency
+          if (recentVideos.includes(item as Movie)) {
+            setFocusedIndex(recentVideos.indexOf(item as Movie));
+          }
+        }}
+      >
+        {({ isFocused }) => (
+          <View style={[styles.highlightThumbnail, isFocused && styles.highlightThumbnailFocused]}>
+            <Image source={{ uri: item.thumbnail }} style={styles.headerImage} />
+            <View style={styles.thumbnailTextContainer}>
+              <Text style={styles.thumbnailText}>{item.title}</Text>
+            </View>
+          </View>
+        )}
+      </SpatialNavigationFocusableView>
+    ),
+    [router, styles, recentVideos],
+  );
+
   const renderScrollableRow = useCallback(
-    (title: string, ref: React.RefObject<FlatList>) => {
-      const renderItem = useCallback(
-        ({ item, index }: { item: CardData; index: number }) => (
-          <SpatialNavigationFocusableView
-            onSelect={() => {
-              router.push({
-                pathname: "/details",
-                params: {
-                  title: item.title,
-                  description: item.description,
-                  headerImage: item.headerImage,
-                  movie: item.movie,
-                },
-              });
-            }}
-            onFocus={() => setFocusedIndex(index)}
-          >
-            {({ isFocused }) => (
-              <View
-                style={[
-                  styles.highlightThumbnail,
-                  isFocused && styles.highlightThumbnailFocused,
-                ]}
-              >
-                <Image
-                  source={{ uri: item.headerImage }}
-                  style={styles.headerImage}
-                />
-                <View style={styles.thumbnailTextContainer}>
-                  <Text style={styles.thumbnailText}>{item.title}</Text>
-                </View>
-              </View>
-            )}
-          </SpatialNavigationFocusableView>
-        ),
-        [router, styles],
-      );
+    (title: string, data: ContentItem[]) => {
+      if (!data || data.length === 0) return null;
 
       return (
         <View style={styles.highlightsContainer}>
@@ -140,7 +150,7 @@ export default function IndexScreen() {
           <SpatialNavigationNode>
             <DefaultFocus>
               <SpatialNavigationVirtualizedList
-                data={moviesData}
+                data={data}
                 orientation="horizontal"
                 renderItem={renderItem}
                 itemSize={scaledPixels(425)}
@@ -153,23 +163,32 @@ export default function IndexScreen() {
         </View>
       );
     },
-    [styles, router, styles.headerImage, styles.thumbnailText],
+    [styles, renderItem],
   );
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LoadingIndicator />
+      </View>
+    );
+  }
+
   return (
-    <SpatialNavigationRoot
-      isActive={isActive}
-      onDirectionHandledWithoutMovement={onDirectionHandledWithoutMovement}
-    >
+    <SpatialNavigationRoot isActive={isActive} onDirectionHandledWithoutMovement={onDirectionHandledWithoutMovement}>
       <View style={styles.container}>
         {renderHeader()}
-        <SpatialNavigationScrollView
-          offsetFromStart={scaledPixels(60)}
-          style={styles.scrollContent}
-        >
-          {renderScrollableRow("Trending Movies", trendingRef)}
-          {renderScrollableRow("Classics", classicsRef)}
-          {renderScrollableRow("Hip and Modern", hipAndModernRef)}
+        <SpatialNavigationScrollView offsetFromStart={scaledPixels(60)} style={styles.scrollContent}>
+          {liveStreams.length > 0 && renderScrollableRow('Live Now', liveStreams as ContentItem[])}
+          {renderScrollableRow('Recent Videos', recentVideos as ContentItem[])}
+
+          {contentSeries.map((series, index) =>
+            series.videos.length > 0 ? (
+              <React.Fragment key={`series-${series.name}-${index}`}>
+                {renderScrollableRow(series.name, series.videos as ContentItem[])}
+              </React.Fragment>
+            ) : null
+          )}
         </SpatialNavigationScrollView>
       </View>
     </SpatialNavigationRoot>
@@ -180,63 +199,69 @@ const useGridStyles = function () {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: "black",
+      backgroundColor: 'black',
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'black',
     },
     scrollContent: {
       flex: 1,
       marginBottom: scaledPixels(48),
     },
     highlightsTitle: {
-      color: "#fff",
+      color: '#fff',
       fontSize: scaledPixels(34),
-      fontWeight: "bold",
+      fontWeight: 'bold',
       marginBottom: scaledPixels(10),
       marginTop: scaledPixels(15),
-      textShadowColor: "rgba(0, 0, 0, 0.75)",
+      textShadowColor: 'rgba(0, 0, 0, 0.75)',
       textShadowOffset: { width: -1, height: 1 },
       textShadowRadius: 10,
     },
     headerTitle: {
-      color: "#fff",
+      color: '#fff',
       fontSize: scaledPixels(48),
-      fontWeight: "bold",
-      textShadowColor: "rgba(0, 0, 0, 0.75)",
+      fontWeight: 'bold',
+      textShadowColor: 'rgba(0, 0, 0, 0.75)',
       textShadowOffset: { width: -1, height: 1 },
       textShadowRadius: 10,
     },
     headerDescription: {
-      color: "#fff",
+      color: '#fff',
       fontSize: scaledPixels(24),
-      fontWeight: "500",
+      fontWeight: '500',
       paddingTop: scaledPixels(16),
-      textShadowColor: "rgba(0, 0, 0, 0.75)",
+      textShadowColor: 'rgba(0, 0, 0, 0.75)',
       textShadowOffset: { width: -1, height: 1 },
       textShadowRadius: 10,
     },
     thumbnailTextContainer: {
-      position: "absolute",
+      position: 'absolute',
       bottom: scaledPixels(10),
       left: scaledPixels(10),
       right: scaledPixels(10),
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
       padding: scaledPixels(5),
       borderRadius: scaledPixels(3),
     },
     thumbnailText: {
-      color: "#fff",
+      color: '#fff',
       fontSize: scaledPixels(18),
-      fontWeight: "bold",
-      textAlign: "center",
+      fontWeight: 'bold',
+      textAlign: 'center',
     },
     highlightThumbnail: {
       width: scaledPixels(400),
       height: scaledPixels(240),
       marginRight: scaledPixels(10),
-      backgroundColor: "rgba(255, 255, 255, 0.1)",
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
       borderRadius: scaledPixels(5),
     },
     highlightThumbnailFocused: {
-      borderColor: "#fff",
+      borderColor: '#fff',
       borderWidth: scaledPixels(4),
     },
     highlightsContainer: {
@@ -244,141 +269,51 @@ const useGridStyles = function () {
       height: scaledPixels(360),
     },
     thumbnailPlaceholder: {
-      backgroundColor: "rgba(255, 255, 255, 0.2)",
-      width: "100%",
-      height: "100%",
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      width: '100%',
+      height: '100%',
       borderRadius: scaledPixels(5),
     },
     header: {
-      width: "100%",
+      width: '100%',
       height: scaledPixels(700),
-      position: "relative",
+      position: 'relative',
     },
     headerImage: {
-      width: "100%",
-      height: "100%",
-      resizeMode: "cover",
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
     },
     gradientLeft: {
-      position: "absolute",
+      position: 'absolute',
       left: 0,
       right: 0,
       top: 0,
-      height: "100%",
+      height: '100%',
     },
     gradientBottom: {
-      position: "absolute",
+      position: 'absolute',
       left: 0,
       right: 0,
       bottom: 0,
-      height: "15%",
+      height: '15%',
     },
     headerTextContainer: {
-      position: "absolute",
-      left: scaledPixels(40), // Add left padding
+      position: 'absolute',
+      left: scaledPixels(40),
       top: 0,
       bottom: 0,
-      justifyContent: "center", // Center vertically
-      width: "50%", // Limit width to prevent overlap with right side
+      justifyContent: 'center',
+      width: '50%',
     },
     highlightsList: {
       paddingLeft: scaledPixels(20),
     },
     cardImage: {
-      width: "100%",
-      height: "70%",
+      width: '100%',
+      height: '70%',
       borderTopLeftRadius: scaledPixels(10),
       borderTopRightRadius: scaledPixels(10),
     },
   });
 };
-
-const moviesData = [
-  {
-    id: 0,
-    title: "Sintel",
-    description:
-      "Sintel is an independently produced short film, initiated by the Blender Foundation as a means to further improve and validate the free/open source 3D creation suite Blender.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    duration: 100,
-  },
-  {
-    id: 1,
-    title: "Big Buck Bunny",
-    description:
-      "Big Buck Bunny tells the story of a giant rabbit with a heart bigger than himself. When one sunny day three rodents rudely harass him, something snaps... and the rabbit ain't no bunny anymore! In the typical cartoon tradition, he prepares the nasty rodents a comical revenge.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    duration: 130,
-  },
-  {
-    id: 2,
-    title: "We Are Going On Bullrun",
-    description:
-      "The Smoking Tire is going on the 2010 Bullrun Live Rally in a 2011 Shelby GT500, and posting a video from the road every single day!",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/WeAreGoingOnBullrun.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-    duration: 95,
-  },
-  {
-    id: 3,
-    title: "Tears of Steel",
-    description:
-      "Tears of Steel was realized with crowd-funding by users of the open source 3D creation tool Blender. The goal was to test a complete open and free pipeline for visual effects in film.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-    duration: 115,
-  },
-  {
-    id: 4,
-    title: "Volkswagen GTI Review",
-    description:
-      "The Smoking Tire heads out to Adams Motorsports Park in Riverside, CA to test the most requested car of 2010, the Volkswagen GTI.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/VolkswagenGTIReview.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
-    duration: 110,
-  },
-  {
-    id: 5,
-    title: "Subaru Outback On Street And Dirt",
-    description:
-      "Smoking Tire takes the all-new Subaru Outback to the highest point we can find in hopes our customer-appreciation Balloon Launch will get some free T-shirts into the hands of our viewers.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/SubaruOutbackOnStreetAndDirt.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
-    duration: 105,
-  },
-  {
-    id: 6,
-    title: "Elephant Dream",
-    description: "The first Blender Open Movie from 2006.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    duration: 90,
-  },
-  {
-    id: 7,
-    title: "What Car Can You Get For A Grand?",
-    description:
-      "The Smoking Tire meets up with Chris and Jorge from CarsForAGrand.com to see just how far $1,000 can go when looking for a car.",
-    headerImage:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/WhatCarCanYouGetForAGrand.jpg",
-    movie:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4",
-    duration: 90,
-  },
-];

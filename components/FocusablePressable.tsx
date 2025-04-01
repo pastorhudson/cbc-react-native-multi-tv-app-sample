@@ -1,74 +1,81 @@
-import React from "react";
-import {
-  Pressable,
-  Text,
-  StyleSheet,
-  PressableProps,
-  ViewStyle,
-} from "react-native";
-import { scaledPixels } from "@/hooks/useScale";
-import { SpatialNavigationFocusableView } from "react-tv-space-navigation";
+import React, { useState } from 'react';
+import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { SpatialNavigationFocusableView } from 'react-tv-space-navigation';
+import { scaledPixels } from '@/utils/scaling';
 
-interface CustomPressableProps extends PressableProps {
+interface FocusablePressableProps {
   text: string;
   onSelect: () => void;
   style?: ViewStyle;
+  textStyle?: TextStyle;
+  disabled?: boolean;
 }
 
-const FocusablePressable = ({
-  text,
-  onSelect,
-  style,
-  ...props
-}: CustomPressableProps) => {
+const FocusablePressable: React.FC<FocusablePressableProps> = ({
+                                                                 text,
+                                                                 onSelect,
+                                                                 style,
+                                                                 textStyle,
+                                                                 disabled = false,
+                                                               }) => {
+  const [pressed, setPressed] = useState(false);
+  const styles = useStyles();
+
+  // If disabled, we can use a wrapper that doesn't pass the onSelect
   return (
-    <SpatialNavigationFocusableView onSelect={onSelect}>
+    <SpatialNavigationFocusableView
+      onSelect={disabled ? undefined : onSelect}
+    >
       {({ isFocused }) => (
         <Pressable
-          {...props}
+          onPress={disabled ? undefined : onSelect}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
           style={[
-            styles.watchButton,
-            isFocused && styles.watchButtonFocused,
+            styles.button,
+            isFocused && styles.focused,
+            pressed && styles.pressed,
+            disabled && styles.disabled,
             style,
           ]}
-          onPress={onSelect}
+          disabled={disabled}
         >
-          <Text
-            style={[
-              isFocused
-                ? styles.watchButtonTextFocused
-                : styles.watchButtonText,
-            ]}
-          >
-            {text}
-          </Text>
+          <Text style={[styles.text, isFocused && styles.focusedText, textStyle]}>{text}</Text>
         </Pressable>
       )}
     </SpatialNavigationFocusableView>
   );
 };
 
-const styles = StyleSheet.create({
-  watchButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
-    paddingVertical: scaledPixels(15),
-    borderRadius: scaledPixels(5),
-    alignItems: "center",
-    alignSelf: "flex-start",
-  },
-  watchButtonFocused: {
-    backgroundColor: "#fff",
-  },
-  watchButtonText: {
-    color: "#fff",
-    fontSize: scaledPixels(18),
-    fontWeight: "bold",
-  },
-  watchButtonTextFocused: {
-    color: "#000",
-    fontSize: scaledPixels(18),
-    fontWeight: "bold",
-  },
-});
+const useStyles = () => {
+  return StyleSheet.create({
+    button: {
+      paddingVertical: scaledPixels(12),
+      paddingHorizontal: scaledPixels(24),
+      borderRadius: scaledPixels(6),
+      backgroundColor: '#333',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    focused: {
+      backgroundColor: '#0078D7',
+    },
+    pressed: {
+      opacity: 0.8,
+    },
+    disabled: {
+      backgroundColor: '#555',
+      opacity: 0.5,
+    },
+    text: {
+      color: '#fff',
+      fontSize: scaledPixels(18),
+      fontWeight: '500',
+    },
+    focusedText: {
+      fontWeight: 'bold',
+    },
+  });
+};
 
 export default FocusablePressable;
